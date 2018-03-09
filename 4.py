@@ -2,7 +2,7 @@ import asyncio
 import subprocess
 
 
-async def run(command, timeout=None):
+async def run(command):
     process = await asyncio.create_subprocess_exec(
         *command,
         stderr=subprocess.PIPE,
