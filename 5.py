@@ -1,32 +1,31 @@
 import asyncio
 import subprocess
 
-condition = asyncio.Condition()
 
-
-async def wait_for_starts_to_align():
+async def wait_for_starts_to_align(condition):
+    print('waiting for the stars to be aligned')
     async with condition:
-        print('waiting for the stars to be aligned')
-        await condition.wait()
         print('the stars are aligned')
 
 
-async def align_the_stars():
+async def align_the_stars(condition):
     print('aligning all starts, this takes a while')
-    await condition.acquire()
-    await asyncio.sleep(1)
-    print('*')
-    await asyncio.sleep(1)
-    print('*')
-    await asyncio.sleep(1)
-    print('*')
-    condition.notify_all()
-    # this also works when used with .notify(n=2) does not work for n=1, I don't yet understand why.
-    condition.release()
+    async with condition:
+        await asyncio.sleep(1)
+        print('*')
+        await asyncio.sleep(1)
+        print('*')
+        await asyncio.sleep(1)
+        print('*')
+        condition.notify(n=1)
 
 
 async def doit(loop):
-    return await asyncio.gather(align_the_stars(), wait_for_starts_to_align())
+    condition = asyncio.Condition()
+    return await asyncio.wait([
+        align_the_stars(condition),
+        wait_for_starts_to_align(condition),
+    ])
 
 
 if __name__ == '__main__':
