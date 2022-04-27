@@ -1,12 +1,17 @@
 # Astronomy Picture Of the Day
-NASA_APOD_API = 'https://api.nasa.gov/planetary/apod?api_key=DEMO_KEY'
 
 import asyncio
+import logging
+import os
+import time
 from os import makedirs
 from shutil import rmtree
-import time
+
+import aiofiles
 import httpx
-import logging
+
+API_KEY = os.getenv('NASA_API_KEY')
+NASA_APOD_API = f'https://api.nasa.gov/planetary/apod?api_key={API_KEY}'
 
 logging.basicConfig(level=logging.INFO)
 
@@ -28,16 +33,47 @@ def duration(func):
 @duration
 async def get_pictures(count=1):
     async with httpx.AsyncClient() as client:
-        response = await client.get(NASA_APOD_API, params={'count': count})
+        logger.info(f'get {NASA_APOD_API}')
+        response = await client.get(NASA_APOD_API,
+                                    params={'count': count},
+                                    timeout=10)
+        response.raise_for_status()
+        tasks = []
+        # print(response.content)
         for item in response.json():
             img_url = item['url']
-            img_name = img_url.rsplit('/', 1)[1]
-            img_response = await client.get(img_url)
-            with open(f'nasa_apod/{img_name}', mode='wb') as fp:
-                fp.write(img_response.content)
+            if 'https://apod.nasa.gov/apod/image/' not in img_url:
+                continue  # apod also serves youtube urls
+            # tasks.append(get_image(client, img_url))
+            tasks.append(get_and_save(client, img_url))
+        await asyncio.wait(tasks)
+        # tasks2 = []
+        # for coro in asyncio.as_completed(tasks):
+        #     img_name, img_bytes = await coro
+        #     tasks2.append(save_images_async(img_name, img_bytes))
+        # await asyncio.wait(tasks2)
+
+
+@duration
+async def get_and_save(client, img_url):
+    img_name, img_response = await get_image(client, img_url)
+    await save_images_async(img_name, img_response)
+
+
+async def get_image(client, img_url: str):
+    img_name = img_url.rsplit('/', 1)[1]
+    logger.info(f'get {img_url}')
+    img_response = await client.get(img_url)
+    return img_name, img_response.content
+
+
+async def save_images_async(img_name, img_bytes):
+    async with aiofiles.open(f'nasa_apod/{img_name}', mode='wb') as f:
+        logger.info(f'writing to nasa_apod/{img_name}')
+        await f.write(img_bytes)
 
 
 if __name__ == "__main__":
     rmtree('nasa_apod')
     makedirs('nasa_apod', exist_ok=True)
-    asyncio.run(get_pictures(count=10))
+    asyncio.run(get_pictures(count=100))
